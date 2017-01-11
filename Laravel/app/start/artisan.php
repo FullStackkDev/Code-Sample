@@ -11,3 +11,7 @@
 |
 */
 
+Artisan::add(new AppCommand);
+Artisan::add(new DailyTaskCommand);
+Artisan::add(new HourlyTaskCommand);
+Artisan::add(new UsiTaskCommand);

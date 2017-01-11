@@ -17,8 +17,12 @@ ClassLoader::addDirectories(array(
 	app_path().'/controllers',
 	app_path().'/models',
 	app_path().'/database/seeds',
+	app_path().'/facades',
+	app_path().'/services',
+	app_path().'/exceptions',
 
 ));
+
 
 /*
 |--------------------------------------------------------------------------
@@ -27,11 +31,13 @@ ClassLoader::addDirectories(array(
 |
 | Here we will configure the error logger setup for the application which
 | is built on top of the wonderful Monolog library. By default we will
-| build a basic log file setup which creates a single file for logs.
+| build a rotating log file setup which creates a new file each day.
 |
 */
 
-Log::useFiles(storage_path().'/logs/laravel.log');
+$logFile = 'log-'.php_sapi_name().'.txt';
+
+Log::useDailyFiles(storage_path().'/logs/'.$logFile);
 
 /*
 |--------------------------------------------------------------------------
@@ -45,11 +51,56 @@ Log::useFiles(storage_path().'/logs/laravel.log');
 | shown, which includes a detailed stack trace during debug.
 |
 */
+App::error(function(\Illuminate\Session\TokenMismatchException $exception)
+{
+		$bag = new Illuminate\Support\MessageBag;
+		$bag->add('password', 'Your session has expired. Please try logging in again.');
+		return Redirect::route('signin')->withInput()->withErrors($bag);
+});
 
 App::error(function(Exception $exception, $code)
 {
+	Log::error('Exception on - ' . Request::url() . ' - code: ' . $code);
 	Log::error($exception);
+
+	if ( ! Config::get('app.debug'))
+	{
+		switch ($code)
+		{
+			case 403:
+				return Response::make(View::make('error/403'), 403);
+			
+			case 404:
+				return Response::make(View::make('error/404'), 404);
+
+			case 500:
+				return Response::make(View::make('error/500'), 500);
+
+			case 503:
+				return Response::make(View::make('error/503'), 503);
+
+			default:
+				return Response::make(View::make('error/404'), 404);
+		}
+	}
+	
+	
 });
+
+
+App::missing(function($ex)
+{
+		Log::error('NOT FOUND - ' . Request::url() . ' - referrer: ' . Request::header('referer'));
+		if (Sentry::check() && strpos(Request::url(), "/backend") !== false) //if logged in
+		{
+			return Redirect::route('backend');
+		}
+		else
+		{
+			return Redirect::home();
+		}
+});
+
 
 /*
 |--------------------------------------------------------------------------
@@ -58,13 +109,13 @@ App::error(function(Exception $exception, $code)
 |
 | The "down" Artisan command gives you the ability to put an application
 | into maintenance mode. Here, you will define what is displayed back
-| to the user if maintenance mode is in effect for the application.
+| to the user if maintenace mode is in effect for this application.
 |
 */
 
 App::down(function()
 {
-	return Response::make("Be right back!", 503);
+	return Response::make(View::make('error/503'), 503);
 });
 
 /*
